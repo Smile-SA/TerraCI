@@ -1,0 +1,41 @@
+Infracost:
+  stage: test
+  environment:
+    name: Cost
+  script:
+    - echo "Cost estimation..."
+    #Infracost installation
+    - wget https://github.com/infracost/infracost/releases/latest/download/infracost-linux-amd64.tar.gz
+    - tar -xzf infracost-linux-amd64.tar.gz
+    - chmod +x infracost-linux-amd64
+    - mv infracost-linux-amd64 /usr/local/bin/infracost
+    - infracost --version
+    - export INFRACOST_API_KEY=$INFRACOST_API_KEY
+    #infracost test
+
+    - infracost breakdown --path .
+    - infracost breakdown --path . > infracost_results.txt
+    - cost_with_unit=$(awk '/OVERALL TOTAL/ {print $NF}' infracost_results.txt)
+    - echo $cost_with_unit
+    - cost="${cost_with_unit#\$}"
+    - echo $cost
+    - budget="$${BUDGET}"
+    - |      
+      budget="$BUDGET"  # Retrieve the budget from the CI/CD settings
+
+      # Perform a floating-point comparison using bc
+      if [ "$(echo "$cost >= $budget" | bc -l)" -eq 1 ]; then
+        difference=$(echo "$cost - $budget" | bc -l)
+        echo "Cost exceeds budget by $difference"
+        # Cancel deployment
+        exit 1
+      else
+        echo "Cost is within the budget"
+      fi
+  artifacts:
+    paths:
+      - infracost_results.txt
+  rules:
+    - needs:
+      - $prev_test
+  allow_failure: false
