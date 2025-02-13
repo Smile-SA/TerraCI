@@ -1,0 +1,113 @@
+stages:
+  - build
+  - test
+  - deploy
+
+Build:
+  stage: build
+  services:
+    - docker:dind
+  image: docker:stable
+  script:
+    ######Commented just for testing########
+    #- docker build -t test_docker .
+    #- docker run  test_docker
+    ##############################################
+    - echo "The file is already in the project"
+
+TfLint:
+  stage: test
+  environment:
+    name: configurationSyntax
+  script:
+    - echo "Linting Terraform code..."
+    - cd terraform
+    - apk update
+    - apk add curl bash
+    - wget -q https://github.com/terraform-linters/tflint/releases/download/v0.48.0/tflint_linux_amd64.zip
+    - unzip tflint_linux_amd64.zip
+    - chmod +x tflint
+    - mv tflint /usr/local/bin/
+    - tflint --version
+
+    #########Put the results in a file#############
+    - tflint > tflint_results.txt 2>&1 || true
+    - num_issues=$(cat tflint_results.txt | awk 'NR==1 {print $1}')
+    - echo "$num_issues is the number"
+    - |
+
+      if [ "$num_issues" -gt 5 ]; then
+       echo "The number of issues found is more than 9."
+       tflint
+       exit 1
+      else
+        echo "The linting conditions are within limits"
+      fi
+#  artifacts:
+#    paths:
+ #     - tflint_results.txt
+  rules:
+    - when: on_success
+    - needs:
+        - Build
+    - changes:
+      - terraform/aws.tf
+  allow_failure: true
+
+#s
+
+Infracost:
+  stage: test
+  environment:
+    name: Cost
+  script:
+    - echo "Cost estimation..."
+    #Infracost installation
+    - wget https://github.com/infracost/infracost/releases/latest/download/infracost-linux-amd64.tar.gz
+    - tar -xzf infracost-linux-amd64.tar.gz
+    - chmod +x infracost-linux-amd64
+    - mv infracost-linux-amd64 /usr/local/bin/infracost
+    - infracost --version
+    - export INFRACOST_API_KEY=$INFRACOST_API_KEY
+    #infracost test
+
+    - infracost breakdown --path .
+    - infracost breakdown --path . > infracost_results.txt
+    - cost_with_unit=$(awk '/OVERALL TOTAL/ {print $NF}' infracost_results.txt)
+    - echo $cost_with_unit
+    - cost="${cost_with_unit#\$}"
+    - echo $cost
+    - budget="$${BUDGET}"
+    - |      
+      budget="$BUDGET"  # Retrieve the budget from the CI/CD settings
+
+      # Perform a floating-point comparison using bc
+      if [ "$(echo "$cost >= 5" | bc -l)" -eq 1 ]; then
+        difference=$(echo "$cost - 5" | bc -l)
+        echo "Cost exceeds budget by $difference"
+        # Cancel deployment
+        exit 1
+      else
+        echo "Cost is within the budget"
+      fi
+  artifacts:
+    paths:
+      - infracost_results.txt
+  rules:
+    - needs:
+      - TfLint
+  allow_failure: true
+
+#n
+
+Deploy:
+  stage: deploy
+  script:
+    - echo "Deploying the model...This is a fake deploy in case of all test valid"
+    - echo "Model successfully deployed."
+
+
+
+# Restored the specific line for TfLint
+# Replaced placeholders in l-part.yml and appended to generated_gitlabci.yml
+# Replaced placeholders in i-part.yml and appended to generated_gitlabci.yml
