@@ -1,0 +1,22 @@
+tests:
+  - name: ConfigurationSyntax
+    rules:
+      MAX_LINT_ISSUES: 155
+    deployment_status: Blocking
+
+  - name: Security
+    rules:
+      CRITICAL_PROBLEMS: 17
+      HIGH_PROBLEMS: 3
+      MEDIUM_PROBLEMS: 4
+      LOW_PROBLEMS: 5
+    selection_priority: 1
+    deployment_status: Optional 
+
+
+  - name: Cost
+    rules:
+      BUDGET: 100    
+    selection_priority: 2
+    deployment_status: Optional
+   
