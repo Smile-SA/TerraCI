@@ -1,0 +1,33 @@
+stages:
+  - build
+  - test
+  - deploy
+
+Build:
+  stage: build
+  services:
+    - docker:dind
+  image: docker:stable
+  script:
+    ######Commented just for testing########
+    #- docker build -t test_docker .
+    #- docker run  test_docker
+    ##############################################
+    - echo "The file is already in the project"
+
+#l
+
+#s
+
+#i
+
+#n
+
+Deploy:
+  stage: deploy
+  script:
+    - echo "Deploying the model...This is a fake deploy in case of all test valid"
+    - echo "Model successfully deployed."
+
+
+

@@ -1,0 +1,145 @@
+
+TfLint:
+  stage: test
+  environment:
+    name: configurationSyntax
+  script:
+    - echo "Linting Terraform code..."
+    - cd terraform
+    - apk update
+    - apk add curl bash
+    - wget -q https://github.com/terraform-linters/tflint/releases/download/v0.48.0/tflint_linux_amd64.zip
+    - unzip tflint_linux_amd64.zip
+    - chmod +x tflint
+    - mv tflint /usr/local/bin/
+    - tflint --version
+
+    #########Put the results in a file#############
+    - tflint > tflint_results.txt 2>&1 || true
+
+    - num_issues=$(cat tflint_results.txt | awk 'NR==1 {print $1}')
+    - echo "$num_issues is the number"
+    - |
+
+      if [ "$num_issues" -gt 9 ]; then
+       echo "The number of issues found is more than 9."
+       tflint
+       exit 1
+      else
+        echo "The linting conditions are within limits"
+      fi
+#  artifacts:
+#    paths:
+ #     - tflint_results.txt
+  rules:
+    - when: on_success
+    - needs:
+        - Build
+    - changes:
+      - terraform/aws.tf
+  allow_failure: true
+
+#error_handling:
+ # stage: test
+ # script:
+ #   - echo "ERROR" # Handle errors with a message if any test fails
+  #rules:
+ #   - needs:
+ #       - Build
+  #  - when: on_failure
+    
+Tfsec:
+  stage: test
+  environment:
+    name: Security
+  script:
+    - echo "Running security tests..."
+    #Tfsec installation
+    #- wget https://github.com/aquasecurity/tfsec/releases/download/v1.28.4/tfsec-checkgen-linux-amd64
+    #- chmod +x tfsec-checkgen-linux-amd64
+    #- mv tfsec-checkgen-linux-amd64 /usr/local/bin/tfsec
+    #- tfsec --version
+    - wget https://github.com/aquasecurity/trivy/releases/download/v0.46.1/trivy_0.46.1_Linux-64bit.tar.gz
+    - tar zxvf  trivy_0.46.1_Linux-64bit.tar.gz 
+    - mv trivy /usr/local/bin/trivy
+    - chmod +x /usr/local/bin/trivy
+    - trivy --version
+    - trivy config ./terraform/aws.tf > trivy_report.txt
+
+    #- cd terraform
+    #- tfsec --debug
+    #- tfsec  --out tfsec_results.txt --format csv
+          #if [ "$CRITICAL_FAILURES" -gt 5 ]; then
+      #  echo "More than 5 critical failures found"
+       # exit 1
+      #fi
+
+    - |
+
+      LOW_FAILURES=$(awk '/LOW: [0-9]+/ {print $NF}' trivy_report.txt)
+
+      MEDIUM_FAILURES=$(awk '/MEDIUM: [0-9]+/ {print $NF}' trivy_report.txt)
+      HIGH_FAILURES=$(awk '/HIGH: [0-9]+/ {print $NF}' trivy_report.txt)
+      CRITICAL_FAILURES=$(grep -o 'CRITICAL: [0-9]*' trivy_report.txt | cut -d ' ' -f 2 | grep -v '^$')
+      echo "Number of critical failures: $CRITICAL_FAILURES"
+      if [ "$LOW_FAILURES" -gt 10 ]  || [ "$MEDIUM_FAILURES" -gt 5 ]  || [ "$HIGH_FAILURES" -gt 6 ]  || [ "$CRITICAL_FAILURES" -gt 5 ]; then
+       echo "The failures conditions are not met."
+       trivy config ./terraform/aws.tf
+       exit 1
+      else
+        echo "All conditions are within limits"
+      fi
+  artifacts:
+    paths:
+      - trivy_report.txt
+      #- tfsec_results.txt
+
+  rules:
+    #- when: on_success
+    - needs:
+      - TfLint
+  allow_failure: true
+
+Infracost:
+  stage: test
+  environment:
+    name: Cost
+  script:
+    - echo "Cost estimation..."
+    #Infracost installation
+    - wget https://github.com/infracost/infracost/releases/latest/download/infracost-linux-amd64.tar.gz
+    - tar -xzf infracost-linux-amd64.tar.gz
+    - chmod +x infracost-linux-amd64
+    - mv infracost-linux-amd64 /usr/local/bin/infracost
+    - infracost --version
+    - export INFRACOST_API_KEY=$INFRACOST_API_KEY
+    #infracost test
+
+    - infracost breakdown --path .
+    - infracost breakdown --path . > infracost_results.txt
+    - cost_with_unit=$(awk '/OVERALL TOTAL/ {print $NF}' infracost_results.txt)
+    - echo $cost_with_unit
+    - cost="${cost_with_unit#\$}"
+    - echo $cost
+    - budget="$${BUDGET}"
+    - |      
+      budget="$BUDGET"  # Retrieve the budget from the CI/CD settings
+
+      # Perform a floating-point comparison using bc
+      if [ "$(echo "$cost >= $budget" | bc -l)" -eq 1 ]; then
+        difference=$(echo "$cost - $budget" | bc -l)
+        echo "Cost exceeds budget by $difference"
+        # Cancel deployment
+        exit 1
+      else
+        echo "Cost is within the budget"
+      fi
+  artifacts:
+    paths:
+      - infracost_results.txt
+  rules:
+    #- when: on_success
+    - needs:
+      - Tfsec
+  allow_failure: true
+

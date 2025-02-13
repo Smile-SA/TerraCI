@@ -1,0 +1,38 @@
+TfLint:
+  stage: test
+  environment:
+    name: configurationSyntax
+  script:
+    - echo "Linting Terraform code..."
+    - cd terraform
+    - apk update
+    - apk add curl bash
+    - wget -q https://github.com/terraform-linters/tflint/releases/download/v0.48.0/tflint_linux_amd64.zip
+    - unzip tflint_linux_amd64.zip
+    - chmod +x tflint
+    - mv tflint /usr/local/bin/
+    - tflint --version
+
+    #########Put the results in a file#############
+    - tflint > tflint_results.txt 2>&1 || true
+    - num_issues=$(cat tflint_results.txt | awk 'NR==1 {print $1}')
+    - echo "$num_issues is the number"
+    - |
+
+      if [ "$num_issues" -gt $Nbissues ]; then
+       echo "The number of issues found is more than 9."
+       tflint
+       exit 1
+      else
+        echo "The linting conditions are within limits"
+      fi
+#  artifacts:
+#    paths:
+ #     - tflint_results.txt
+  rules:
+    - when: on_success
+    - needs:
+        - Build
+    - changes:
+      - terraform/aws.tf
+  allow_failure: true

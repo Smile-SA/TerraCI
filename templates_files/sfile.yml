@@ -1,0 +1,36 @@
+Tfsec:
+  stage: test
+  environment:
+    name: Security
+  script:
+    - echo "Running security tests..."
+    - wget https://github.com/aquasecurity/trivy/releases/download/v0.46.1/trivy_0.46.1_Linux-64bit.tar.gz
+    - tar zxvf  trivy_0.46.1_Linux-64bit.tar.gz 
+    - mv trivy /usr/local/bin/trivy
+    - chmod +x /usr/local/bin/trivy
+    - trivy --version
+    - trivy config ./terraform/aws.tf > trivy_report.txt
+    - |
+
+      LOW_FAILURES=$(awk '/LOW: [0-9]+/ {print $NF}' trivy_report.txt)
+      MEDIUM_FAILURES=$(awk '/MEDIUM: [0-9]+/ {print $NF}' trivy_report.txt)
+      HIGH_FAILURES=$(awk '/HIGH: [0-9]+/ {print $NF}' trivy_report.txt)
+      CRITICAL_FAILURES=$(grep -o 'CRITICAL: [0-9]*' trivy_report.txt | cut -d ' ' -f 2 | grep -v '^$')
+      echo "Number of critical failures: $CRITICAL_FAILURES"
+      if [ "$LOW_FAILURES" -gt $LOW_PROBLEMS ]  || [ "$MEDIUM_FAILURES" -gt $MEDIUM_PROBLEMS ]  || [ "$HIGH_FAILURES" -gt $HIGH_PROBLEMS ]  || [ "$CRITICAL_FAILURES" -gt $CRITICAL_PROBLEMS ]; then
+       echo "The failures conditions are not met."
+       trivy config ./terraform/aws.tf
+       exit 1
+      else
+        echo "All conditions are within limits"
+      fi
+  artifacts:
+    paths:
+      - trivy_report.txt
+  rules:
+    - needs:
+      - $prev_test
+      
+  allow_failure: false
+
+
