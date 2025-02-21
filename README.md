@@ -1,7 +1,7 @@
 # TerraCI
 
 ## Description
-
+This project is a copy of the original repository in https://gitlab.com/hiba.awad1/TerraCI
 The TerraCI provides an automatic generation of the gitlabci.yml file, to be able to run the pipeline using different tests and setting user-conditions to allow an automatic deployment at the end.
 
 ## Getting started
